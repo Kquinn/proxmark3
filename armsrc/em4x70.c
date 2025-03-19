@@ -214,6 +214,11 @@ static void encoded_bit_array_to_bytes(const uint8_t *bits, int count_of_bits, u
 static int em4x70_receive(uint8_t *bits, size_t maximum_bits_to_read);
 static bool find_listen_window(bool command);
 
+//HACK - Defaults for testing timing
+static int  timing_count = (63 * TICKS_PER_FC);//Set back to known good parity timing
+
+
+
 static void init_tag(void) {
     memset(tag.data, 0x00, sizeof(tag.data));
 }
@@ -902,8 +907,33 @@ static bool create_legacy_em4x70_bitstream_for_cmd_id(em4x70_command_bitstream_t
     bool result = true;
     memset(out_cmd_bitstream, 0, sizeof(em4x70_command_bitstream_t));
     out_cmd_bitstream->command = EM4X70_COMMAND_ID;
-    uint8_t cmd = with_command_parity ? 0x3u : 0x1u;
+    //HACK -- Always use parity
+    //uint8_t cmd = with_command_parity ? 0x3u : 0x1u;
+    uint8_t cmd = 0x3u;
     result = result && add_nibble_to_bitstream(&out_cmd_bitstream->to_send, cmd, false);
+
+    //Experiment 1
+    /*
+    uint8_t cmd = 0x1u;
+    result = result && add_nibble_to_bitstream(&out_cmd_bitstream->to_send, cmd, false);
+    result = result && add_bit_to_bitstream(&out_cmd_bitstream->to_send,1);
+    */
+
+    //Experiment 2
+    /*
+    uint8_t cmd = 0x3u;
+    result = result && add_nibble_to_bitstream(&out_cmd_bitstream->to_send, cmd, false);
+    result = result && add_nibble_to_bitstream(&out_cmd_bitstream->to_send, 0x0u, false);
+    */
+
+    //Experiment 3
+    /*
+    uint8_t cmd = 0x3u;
+    result = result && add_bit_to_bitstream(&out_cmd_bitstream->to_send,0);
+    result = result && add_bit_to_bitstream(&out_cmd_bitstream->to_send,0);
+    result = result && add_bit_to_bitstream(&out_cmd_bitstream->to_send,1);
+    */
+   
     out_cmd_bitstream->to_receive.bitcount = 32;
     if (out_cmd_bitstream->to_send.bitcount != expected_bits_to_send) {
         DPRINTF_ERROR(("INTERNAL ERROR: Expected %d bits to be added to send buffer, but only %d bits were added", expected_bits_to_send, out_cmd_bitstream->to_send.bitcount));
@@ -916,7 +946,9 @@ static bool create_legacy_em4x70_bitstream_for_cmd_um1(em4x70_command_bitstream_
     bool result = true;
     memset(out_cmd_bitstream, 0, sizeof(em4x70_command_bitstream_t));
     out_cmd_bitstream->command = EM4X70_COMMAND_UM1;
-    uint8_t cmd = with_command_parity ? 0x5u : 0x2u;
+    //HACK -- Always use parity
+    //uint8_t cmd = with_command_parity ? 0x5u : 0x2u;
+    uint8_t cmd = 0x5u;
     result = result && add_nibble_to_bitstream(&out_cmd_bitstream->to_send, cmd, false);
     out_cmd_bitstream->to_receive.bitcount = 32;
     if (out_cmd_bitstream->to_send.bitcount != expected_bits_to_send) {
@@ -930,7 +962,9 @@ static bool create_legacy_em4x70_bitstream_for_cmd_um2(em4x70_command_bitstream_
     bool result = true;
     memset(out_cmd_bitstream, 0, sizeof(em4x70_command_bitstream_t));
     out_cmd_bitstream->command = EM4X70_COMMAND_UM2;
-    uint8_t cmd = with_command_parity ? 0xFu : 0x7u;
+    //HACK -- Always use parity
+    //uint8_t cmd = with_command_parity ? 0xFu : 0x7u;
+    uint8_t cmd = 0xFu;
     result = result && add_nibble_to_bitstream(&out_cmd_bitstream->to_send, cmd, false);
     out_cmd_bitstream->to_receive.bitcount = 64;
     if (out_cmd_bitstream->to_send.bitcount != expected_bits_to_send) {
@@ -1240,7 +1274,7 @@ static bool find_listen_window(bool command) {
                  *   Allow user adjustment in range: 24-48 field cycles?
                  *   On PM3Easy I've seen success at 24..40 field
                  */
-                WaitTicks(40 * TICKS_PER_FC);
+                WaitTicks(timing_count);
                 // Send RM Command
                 em4x70_send_bit(0);
                 em4x70_send_bit(0);
@@ -1451,6 +1485,20 @@ void em4x70_info(const em4x70_data_t *etd, bool ledcontrol) {
 
     // Find the Tag
     if (get_signalproperties() && find_em4x70_tag()) {
+
+
+        timing_count = 0;
+        for(timing_count = 0; timing_count<2000; timing_count++){
+            em4x70_read_id();
+            //sleep 0.1 second between attempts
+            for(int j = 0; j<1000; j++){
+                WaitUS(100);
+            }
+            WDT_HIT();
+        }
+        timing_count = (63 * TICKS_PER_FC);//Set back to known good
+
+        
         // Read ID and UM1 (both em4070 and em4170)
         success = em4x70_read_id() && em4x70_read_um1();
         // em4170 also has UM2, V4070 does not (e.g., 1998 Porsche Boxster)
